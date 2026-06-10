@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>초고주사율 부드러운 파이차트 타이머</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f7f9fa;
+            margin: 0;
+        }
+
+        .timer-container {
+            background-color: ####ffffff;
+            padding: 30px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+        }
+
+        /* 파이차트를 감싸는 컨테이너 */
+        .pie-wrapper {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            /* GPU 하드웨어 가속 강제 활성화 */
+            transform: translate3d(0, 0, 0); 
+            backface-visibility: hidden;
+        }
+
+        /* SVG 스타일: 12시 방향에서 시작하도록 -90도 회전 */
+        .pie-svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        /* 파이차트 배경 원 */
+        .bg-circle {
+            fill: none;
+            stroke: ##ffffff;
+            stroke-width: 50; /* 반지름 25 레이어 위로 두께 50을 주어 꽉 찬 원을 만듦 */
+        }
+
+        /* 실시간으로 줄어드는 프로그레스 원 */
+        .fg-circle {
+            fill: none;
+            stroke: #4ef2a1;
+            stroke-width: 50;
+            stroke-linecap: butt;
+            /* 프레임 드랍 발생 시 보정해주는 미세한 트랜지션 */
+            transition: stroke-dashoffset 0.05s linear; 
+        }
+
+        /* 정중앙 시간 표시 텍스트 */
+        .time-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 6px 16px;
+            border-radius: 10px;
+            z-index: 10;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .time-display.hidden {
+            visibility: hidden;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .input-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="number"] {
+            width: 70px;
+            padding: 10px;
+            font-size: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            text-align: center;
+            outline: none;
+        }
+
+        input[type="number"]:focus {
+            border-color: #4ef2a1;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 18px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: #edf2f7;
+            color: #4a5568;
+        }
+
+        button:hover {
+            background-color: #e2e8f0;
+        }
+
+        #startBtn {
+            background-color: #4ef2a1;
+            color: #1a202c;
+        }
+
+        #startBtn:hover {
+            background-color: #3dd691;
+        }
+
+        #toggleDisplayBtn {
+            background-color: #4a5568;
+            color: white;
+            width: 100%;
+        }
+
+        #toggleDisplayBtn:hover {
+            background-color: #2d3748;
+        }
+    </style>
+</head>
+<body>
+
+<div class="timer-container">
+    <div class="pie-wrapper">
+        <svg class="pie-svg" viewBox="0 0 100 100">
+            <circle class="bg-circle" cx="50" cy="50" r="25" />
+            <circle id="progressCircle" class="fg-circle" cx="50" cy="50" r="25" />
+        </svg>
+        <div class="time-display" id="timeDisplay">00:00</div>
+    </div>
+
+    <div class="controls">
+        <div class="input-group">
+            <input type="number" id="minutesInput" min="1" value="5" placeholder="분">
+            <span>분</span>
+        </div>
+        
+        <div class="btn-group">
+            <button id="startBtn">시작</button>
+            <button id="resetBtn">리셋</button>
+        </div>
+
+        <button id="toggleDisplayBtn">시간 표시 OFF</button>
+    </div>
+</div>
+
+<script>
+    let animationFrameId = null;
+    let startTime = null;
+    let totalMilliseconds = 0;
+    let elapsedPausedTime = 0;
+    let isRunning = false;
+
+    const minutesInput = document.getElementById('minutesInput');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const toggleDisplayBtn = document.getElementById('toggleDisplayBtn');
+    const progressCircle = document.getElementById('progressCircle');
+    const timeDisplay = document.getElementById('timeDisplay');
+
+    // SVG 원의 둘레 구하기 (2 * PI * r) -> r이 25이므로 둘레는 약 157.0796
+    const radius = progressCircle.r.baseVal.value;
+    const circumference = 2 * Math.PI * radius;
+
+    // 초기 SVG 대시 설정 (처음엔 가득 채움)
+    progressCircle.style.strokeDasharray = circumference;
+    progressCircle.style.strokeDashoffset = 0;
+
+    function updateTimer() {
+        const currentTime = performance.now();
+        const elapsed = currentTime - startTime;
+        const remaining = totalMilliseconds - elapsed;
+
+        if (remaining <= 0) {
+            cancelAnimationFrame(animationFrameId);
+            isRunning = false;
+            startBtn.textContent = '시작';
+            minutesInput.disabled = false;
+            totalMilliseconds = 0;
+            elapsedPausedTime = 0;
+            
+            timeDisplay.textContent = '00:00';
+            progressCircle.style.strokeDashoffset = circumference; // 완전히 비움
+            
+            setTimeout(() => alert('타이머가 종료되었습니다!'), 50);
+            return;
+        }
+
+        // 1. 부드러운 SVG 파이차트 깎기 계산
+        const progress = remaining / totalMilliseconds; // 1에서 0으로 수렴
+        // 대시 오프셋을 조절해 소수점 단위까지 부드럽게 원을 지워나감
+        progressCircle.style.strokeDashoffset = circumference * (1 - progress);
+
+        // 2. 텍스트 시간 업데이트 (올림 처리하여 직관성 유지)
+        const remainingSeconds = Math.ceil(remaining / 1000);
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        timeDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+        animationFrameId = requestAnimationFrame(updateTimer);
+    }
+
+    // 시작 / 일시정지
+    startBtn.addEventListener('click', () => {
+        if (isRunning) {
+            cancelAnimationFrame(animationFrameId);
+            elapsedPausedTime = performance.now() - startTime;
+            isRunning = false;
+            startBtn.textContent = '시작';
+        } else {
+            if (totalMilliseconds === 0) {
+                const mins = parseInt(minutesInput.value) || 0;
+                if (mins <= 0) {
+                    alert('1분 이상의 올바른 시간을 입력해주세요.');
+                    return;
+                }
+                totalMilliseconds = mins * 60 * 1000;
+                elapsedPausedTime = 0;
+            }
+
+            startTime = performance.now() - elapsedPausedTime;
+            isRunning = true;
+            startBtn.textContent = '일시정지';
+            minutesInput.disabled = true;
+
+            animationFrameId = requestAnimationFrame(updateTimer);
+        }
+    });
+
+    // 리셋
+    resetBtn.addEventListener('click', () => {
+        cancelAnimationFrame(animationFrameId);
+        isRunning = false;
+        startBtn.textContent = '시작';
+        minutesInput.disabled = false;
+        totalMilliseconds = 0;
+        elapsedPausedTime = 0;
+        
+        timeDisplay.textContent = '00:00';
+        progressCircle.style.strokeDashoffset = 0;
+    });
+
+    // 시간 표시 ON/OFF
+    toggleDisplayBtn.addEventListener('click', () => {
+        if (timeDisplay.classList.contains('hidden')) {
+            timeDisplay.classList.remove('hidden');
+            toggleDisplayBtn.textContent = '시간 표시 OFF';
+        } else {
+            timeDisplay.classList.add('hidden');
+            toggleDisplayBtn.textContent = '시간 표시 ON';
+        }
+    });
+</script>
+
+</body>
+</html>

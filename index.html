@@ -3,214 +3,427 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minimal Pie Timer</title>
+    <title>초고주사율 부드러운 파이차트 타이머</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            background-color: #f7f9fa;
             margin: 0;
-            background-color: #f0f0f0;
         }
-        .container {
-            background-color: #f0f0f0;
+
+        .timer-container {
+            background-color: #ffffff;
             padding: 30px;
-            border-radius: 15px;
-            text-align: center;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        /* 파이차트를 감싸는 컨테이너 */
+        .pie-wrapper {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            /* GPU 하드웨어 가속 강제 활성화 */
+            transform: translate3d(0, 0, 0); 
+            backface-visibility: hidden;
+        }
+
+        /* SVG 스타일: 12시 방향에서 시작하도록 -90도 회전 */
+        .pie-svg {
             width: 100%;
-            max-width: 350px;
+            height: 100%;
+            transform: rotate(-90deg);
         }
-        #timerSVG {
-            width: 250px;
-            height: 250px;
-            margin: 0 auto 15px;
+
+        /* 파이차트 배경 원 */
+        .bg-circle {
+            fill: none;
+            stroke: ##ffffff;
+            stroke-width: 50; /* 반지름 25 레이어 위로 두께 50을 주어 꽉 찬 원을 만듦 */
         }
-        #timerBackground {
-            fill: #007bff; /* 기본 채워진 색상 (파란색) */
+
+        /* 실시간으로 줄어드는 프로그레스 원 */
+        .fg-circle {
+            fill: none;
+            stroke: #4ef2a1;
+            stroke-width: 50;
+            stroke-linecap: butt;
+            /* 프레임 드랍 발생 시 보정해주는 미세한 트랜지션 */
+            transition: stroke-dashoffset 0.05s linear, stroke 0.2s ease; 
         }
-        #timerPath {
-            fill: #f0f0f0; /* 시간이 흐르며 깎여나가는/지워지는 색상 (밝은 회색) */
-        }
-        /* ✨ 시간 표시 스타일 */
-        #timeText {
-            font-size: 32px;
+
+        /* 정중앙 시간 표시 텍스트 */
+        .time-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.2rem;
             font-weight: bold;
-            color: #333;
-            margin-bottom: 15px;
-        }
-        /* ✨ ON/OFF 토글 영역 스타일 */
-        .toggle-container {
-            margin-bottom: 20px;
-            font-size: 14px;
-            color: #555;
+            color: #2c3e50;
+            padding: 6px 16px;
+            border-radius: 10px;
+            z-index: 10;
             user-select: none;
+            pointer-events: none;
         }
-        .toggle-container input {
-            cursor: pointer;
-            vertical-align: middle;
-            margin-right: 5px;
+
+        .time-display.hidden {
+            visibility: hidden;
         }
-        .input-container {
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .input-group {
             display: flex;
             justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .input-item {
+            display: flex;
+            align-items: center;
             gap: 8px;
+            font-size: 0.95rem;
+            color: #4a5568;
+            font-weight: 500;
         }
+
         input[type="number"] {
-            width: 70px;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            width: 60px;
+            padding: 8px;
+            font-size: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
             text-align: center;
+            outline: none;
         }
-        button {
-            border: none;
-            color: white;
-            padding: 10px 20px;
-            font-size: 16px;
+
+        input[type="number"]:focus {
+            border-color: #4ef2a1;
+        }
+
+        /* 컬러 픽커 스타일 커스텀 */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            width: 40px;
+            height: 38px;
             cursor: pointer;
-            border-radius: 5px;
-            font-weight: bold;
+            background: none;
+            padding: 0;
+            overflow: hidden;
         }
-        #startButton {
-            background-color: #007bff;
+
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
         }
-        #resetButton {
-            background-color: #6c757d;
+
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
         }
-        button:disabled, input:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
+
+        /* [추가] 빠른 색상 선택 칩 스타일 */
+        .color-chips {
+            display: flex;
+            gap: 6px;
+            margin-left: 2px;
+        }
+
+        .chip {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid #e2e8f0;
+            cursor: pointer;
+            padding: 0;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .chip:hover {
+            transform: scale(1.15);
+            border-color: #cbd5e1;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 18px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: #edf2f7;
+            color: #4a5568;
+        }
+
+        button:hover {
+            background-color: #e2e8f0;
+        }
+
+        #startBtn {
+            background-color: #4ef2a1;
+            color: #1a202c;
+        }
+
+        #startBtn:hover {
+            background-color: #3dd691;
+        }
+
+        #toggleDisplayBtn {
+            background-color: #4a5568;
+            color: white;
+            width: 100%;
+        }
+
+        #toggleDisplayBtn:hover {
+            background-color: #2d3748;
+        }
+
+        /* 화면 꺼짐 방지 상태 표시 레이블 */
+        .wakelock-status {
+            font-size: 0.75rem;
+            color: #a0aec0;
+            text-align: center;
+            margin-top: -5px;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <svg id="timerSVG" viewBox="0 0 100 100">
-            <circle id="timerBackground" cx="50" cy="50" r="44" />
-            <path id="timerPath" d="M50,50 L50,5 A45,45 0 0,1 50,5 Z" />
+<div class="timer-container">
+    <div class="pie-wrapper">
+        <svg class="pie-svg" viewBox="0 0 100 100">
+            <circle class="bg-circle" cx="50" cy="50" r="25" />
+            <circle id="progressCircle" class="fg-circle" cx="50" cy="50" r="25" />
         </svg>
-        
-        <div id="timeText">00:00</div>
-
-        <div class="toggle-container">
-            <label>
-                <input type="checkbox" id="timeToggle" checked onchange="toggleTimeDisplay()"> 
-                시간 표시
-            </label>
-        </div>
-        
-        <div class="input-container">
-            <input type="number" id="minutes" min="1" placeholder="분 입력">
-            <button id="startButton" onclick="startTimer()">시작</button>
-            <button id="resetButton" onclick="resetTimer()" disabled>리셋</button>
-        </div>
+        <div class="time-display" id="timeDisplay">00:00</div>
     </div>
 
-    <script>
-        let totalSeconds = 0;
-        let elapsedTime = 0;
-        let isRunning = false;
-        let lastTimestamp = 0;
-        let animationFrameId = null;
+    <div class="controls">
+        <div class="input-group">
+            <div class="input-item">
+                <input type="number" id="minutesInput" min="1" value="5" placeholder="분">
+                <span>분</span>
+            </div>
+            <div class="input-item">
+                <span>색상</span>
+                <input type="color" id="colorPicker" value="#4ef2a1" list="presetColors">
+                <datalist id="presetColors">
+                    <option value="#4ef2a1"></option>
+                    <option value="#eee8d8"></option>
+                    <option value="#00aaff"></option>
+                    <option value="#ff4040"></option>
+                </datalist>
+                
+                <div class="color-chips">
+                    <button type="button" class="chip" data-color="#4ef2a1" style="background-color: #4ef2a1;" title="민트 초록"></button>
+                    <button type="button" class="chip" data-color="#eee8d8" style="background-color: #eee8d8;" title="연한 베이지"></button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="btn-group">
+            <button id="startBtn">시작</button>
+            <button id="resetBtn">리셋</button>
+        </div>
 
-        function startTimer() {
-            if (isRunning) return;
+        <button id="toggleDisplayBtn">시간 표시 OFF</button>
+        <div class="wakelock-status" id="wakeLockStatus">화면 꺼짐 방지: 비활성화</div>
+    </div>
+</div>
 
-            const minutesInput = parseInt(document.getElementById('minutes').value) || 0;
-            if (minutesInput <= 0) {
-                alert('1분 이상의 올바른 시간을 입력해주세요.');
-                return;
+<script>
+    let animationFrameId = null;
+    let startTime = null;
+    let totalMilliseconds = 0;
+    let elapsedPausedTime = 0;
+    let isRunning = false;
+    let wakeLock = null; // 화면 꺼짐 방지 객체 저장 변수
+
+    const minutesInput = document.getElementById('minutesInput');
+    const colorPicker = document.getElementById('colorPicker');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const toggleDisplayBtn = document.getElementById('toggleDisplayBtn');
+    const progressCircle = document.getElementById('progressCircle');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const wakeLockStatus = document.getElementById('wakeLockStatus');
+
+    // SVG 원의 둘레 구하기 (2 * PI * r) -> r이 25이므로 둘레는 약 157.0796
+    const radius = progressCircle.r.baseVal.value;
+    const circumference = 2 * Math.PI * radius;
+
+    // 초기 SVG 대시 설정 (처음엔 가득 채움)
+    progressCircle.style.strokeDasharray = circumference;
+    progressCircle.style.strokeDashoffset = 0;
+
+    // 실시간 색상 변경 이벤트리스너
+    colorPicker.addEventListener('input', (e) => {
+        progressCircle.style.stroke = e.target.value;
+    });
+
+    // [추가] 컬러 칩 선택 이벤트리스너 구현
+    document.querySelectorAll('.chip').forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            const selectedColor = e.target.getAttribute('data-color');
+            colorPicker.value = selectedColor; // 컬러 픽커 싱크 맞추기
+            progressCircle.style.stroke = selectedColor; // 타이머 원 색상 즉시 변경
+        });
+    });
+
+    // 화면 꺼짐 방지(Wake Lock) 요청 함수
+    async function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLockStatus.textContent = '화면 꺼짐 방지: 활성화 중';
+                
+                wakeLock.addEventListener('release', () => {
+                    if (!isRunning) {
+                        wakeLockStatus.textContent = '화면 꺼짐 방지: 비활성화';
+                    }
+                });
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+                wakeLockStatus.textContent = '화면 꺼짐 방지: 설정 실패';
             }
+        } else {
+            wakeLockStatus.textContent = '화면 꺼짐 방지: 미지원 브라우저';
+        }
+    }
 
-            totalSeconds = minutesInput * 60;
-            elapsedTime = 0;
-            isRunning = true;
-            lastTimestamp = performance.now();
+    // 화면 꺼짐 방지 해제 함수
+    function releaseWakeLock() {
+        if (wakeLock !== null) {
+            wakeLock.release().then(() => {
+                wakeLock = null;
+                wakeLockStatus.textContent = '화면 꺼짐 방지: 비활성화';
+            });
+        }
+    }
+
+    function updateTimer() {
+        const currentTime = performance.now();
+        const elapsed = currentTime - startTime;
+        const remaining = totalMilliseconds - elapsed;
+
+        if (remaining <= 0) {
+            cancelAnimationFrame(animationFrameId);
+            isRunning = false;
+            startBtn.textContent = '시작';
+            minutesInput.disabled = false;
+            totalMilliseconds = 0;
+            elapsedPausedTime = 0;
             
-            document.getElementById('startButton').disabled = true;
-            document.getElementById('minutes').disabled = true;
-            document.getElementById('resetButton').disabled = false;
-
-            requestAnimationFrame(updateTimer);
+            timeDisplay.textContent = '00:00';
+            progressCircle.style.strokeDashoffset = circumference; // 완전히 비움
+            
+            releaseWakeLock(); // 타이머 종료 시 화면 꺼짐 방지 해제
+            
+            setTimeout(() => alert('타이머가 종료되었습니다!'), 50);
+            return;
         }
 
-        function updateTimer(timestamp) {
-            if (!isRunning) return;
+        // 1. 부드러운 SVG 파이차트 깎기 계산
+        const progress = remaining / totalMilliseconds; // 1에서 0으로 수렴
+        progressCircle.style.strokeDashoffset = circumference * (1 - progress);
 
-            const deltaTime = timestamp - lastTimestamp;
-            lastTimestamp = timestamp;
+        // 2. 텍스트 시간 업데이트 (올림 처리하여 직관성 유지)
+        const remainingSeconds = Math.ceil(remaining / 1000);
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        timeDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-            elapsedTime += deltaTime / 1000;
+        animationFrameId = requestAnimationFrame(updateTimer);
+    }
 
-            if (elapsedTime >= totalSeconds) {
-                elapsedTime = totalSeconds;
-                updateTimerDisplay();
-                alert("타이머가 종료되었습니다!");
-                resetTimer();
-                return;
+    // 시작 / 일시정지
+    startBtn.addEventListener('click', async () => {
+        if (isRunning) {
+            cancelAnimationFrame(animationFrameId);
+            elapsedPausedTime = performance.now() - startTime;
+            isRunning = false;
+            startBtn.textContent = '시작';
+            
+            releaseWakeLock(); // 일시정지 시 화면 꺼짐 방지 해제
+        } else {
+            if (totalMilliseconds === 0) {
+                const mins = parseInt(minutesInput.value) || 0;
+                if (mins <= 0) {
+                    alert('1분 이상의 올바른 시간을 입력해주세요.');
+                    return;
+                }
+                totalMilliseconds = mins * 60 * 1000;
+                elapsedPausedTime = 0;
             }
 
-            updateTimerDisplay();
+            startTime = performance.now() - elapsedPausedTime;
+            isRunning = true;
+            startBtn.textContent = '일시정지';
+            minutesInput.disabled = true;
+
+            await requestWakeLock(); // 타이머 동작 시 화면 꺼짐 방지 활성화
+
             animationFrameId = requestAnimationFrame(updateTimer);
         }
+    });
 
-        function resetTimer() {
-            isRunning = false;
-            cancelAnimationFrame(animationFrameId);
-            
-            totalSeconds = 0;
-            elapsedTime = 0;
+    // 리셋
+    resetBtn.addEventListener('click', () => {
+        cancelAnimationFrame(animationFrameId);
+        isRunning = false;
+        startBtn.textContent = '시작';
+        minutesInput.disabled = false;
+        totalMilliseconds = 0;
+        elapsedPausedTime = 0;
+        
+        timeDisplay.textContent = '00:00';
+        progressCircle.style.strokeDashoffset = 0;
+        
+        releaseWakeLock(); // 리셋 시 화면 꺼짐 방지 해제
+    });
 
-            document.getElementById('startButton').disabled = false;
-            document.getElementById('minutes').disabled = false;
-            document.getElementById('resetButton').disabled = true;
-            document.getElementById('minutes').value = '';
-            
-            // 시간 텍스트 초기화
-            document.getElementById('timeText').textContent = '00:00';
-            document.getElementById('timerPath').setAttribute('d', 'M50,50 L50,5 A45,45 0 0,1 50,5 Z');
+    // 시간 표시 ON/OFF
+    toggleDisplayBtn.addEventListener('click', () => {
+        if (timeDisplay.classList.contains('hidden')) {
+            timeDisplay.classList.remove('hidden');
+            toggleDisplayBtn.textContent = '시간 표시 OFF';
+        } else {
+            timeDisplay.classList.add('hidden');
+            toggleDisplayBtn.textContent = '시간 표시 ON';
         }
+    });
 
-        function updateTimerDisplay() {
-            const timerPath = document.getElementById('timerPath');
-            const timeText = document.getElementById('timeText');
-            
-            const remainingTime = Math.max(0, totalSeconds - elapsedTime);
-            const progress = elapsedTime / totalSeconds;
-            const angle = progress * 360;
-            
-            // ✨ 시간 계산 및 텍스트 업데이트
-            const minutes = Math.floor(remainingTime / 60);
-            const secs = Math.floor(remainingTime % 60);
-            timeText.textContent = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            
-            if (angle >= 360) {
-                timerPath.setAttribute('d', 'M50,50 L50,5 A45,45 0 1,1 49.9,5 Z');
-                return;
-            }
-
-            const x = 50 + 45 * Math.sin(angle * Math.PI / 180);
-            const y = 50 - 45 * Math.cos(angle * Math.PI / 180);
-            const largeArcFlag = angle > 180 ? 1 : 0;
-            
-            timerPath.setAttribute('d', `M50,50 L50,5 A45,45 0 ${largeArcFlag},1 ${x},${y} Z`);
+    // 탭 전환 시(백그라운드로 갔다가 돌아올 때) Wake Lock 재연결 보정
+    document.addEventListener('visibilitychange', async () => {
+        if (wakeLock !== null && document.visibilityState === 'visible' && isRunning) {
+            await requestWakeLock();
         }
+    });
+</script>
 
-        // ✨ 시간 표시 토글 제어 함수
-        function toggleTimeDisplay() {
-            const timeText = document.getElementById('timeText');
-            const checkbox = document.getElementById('timeToggle');
-            
-            if (checkbox.checked) {
-                timeText.style.display = 'block';
-            } else {
-                timeText.style.display = 'none';
-            }
-        }
-    </script>
 </body>
 </html>
